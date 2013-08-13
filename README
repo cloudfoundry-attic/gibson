@@ -26,20 +26,10 @@ See https://github.com/cloudfoundry/gorouter
 = Usage
 
     client := NewRouterClient("10.10.16.13", messageBus)
-    
-    // One-off (un)registration:
-    client.Register(1234, []string{"myhost.com"})
-    client.Unregister(1234, []string{"myhost.com"})
-    
-    // Periodic registration:
-    
-    // Setting up the interval:
+
+    // set up periodic registration
+    // optional if all you want is a one-off registration
     client.Greet()
-    
-    client.Periodically(func() {
-      registerAllMyRoutes(client)
-    })
-    
-    func registerAllMyRoutes(client *RouterClient) {
-        client.Register(1234, []string{"myhost.com"})
-    }
+
+    client.Register(1234, "myhost.com")
+    client.Unregister(1234, "myhost.com")
