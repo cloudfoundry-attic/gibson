@@ -33,3 +33,18 @@ See https://github.com/cloudfoundry/gorouter
 
     client.Register(1234, "myhost.com")
     client.Unregister(1234, "myhost.com")
+
+= Registrar Executable
+
+If you don't care to write your own CF Router adapter, you can use the
+`registrar` executable instead:
+
+    go install github.com/cloudfoundry/gibson/registrar
+
+    registrar -ip=my.local.address \
+      -natsAddresses=1.2.3.4:4222
+      -natsUsername=nats \
+      -natsPassword=nats \
+      -routes=8080:example.com,8081:example.org
+
+The registrar will stay running and continue registering the given routes.
