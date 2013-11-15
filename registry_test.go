@@ -2,6 +2,7 @@ package gibson
 
 import (
 	"fmt"
+
 	. "launchpad.net/gocheck"
 )
 

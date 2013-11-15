@@ -2,10 +2,12 @@ package gibson
 
 import (
 	"encoding/json"
-	"github.com/cloudfoundry/go_cfmessagebus"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/cloudfoundry/yagnats"
+	"github.com/nu7hatch/gouuid"
 )
 
 type RouterClient interface {
@@ -16,7 +18,7 @@ type RouterClient interface {
 
 type CFRouterClient struct {
 	Host       string
-	messageBus cfmessagebus.MessageBus
+	messageBus yagnats.NATSClient
 
 	registry *Registry
 
@@ -35,7 +37,7 @@ type RouterGreetingMessage struct {
 	MinimumRegisterInterval int `json:"minimumRegisterIntervalInSeconds"`
 }
 
-func NewCFRouterClient(host string, messageBus cfmessagebus.MessageBus) *CFRouterClient {
+func NewCFRouterClient(host string, messageBus yagnats.NATSClient) *CFRouterClient {
 	return &CFRouterClient{
 		Host: host,
 
@@ -46,12 +48,21 @@ func NewCFRouterClient(host string, messageBus cfmessagebus.MessageBus) *CFRoute
 }
 
 func (r *CFRouterClient) Greet() error {
-	err := r.messageBus.Subscribe("router.start", r.handleGreeting)
+	_, err := r.messageBus.Subscribe("router.start", r.handleGreeting)
 	if err != nil {
 		return err
 	}
 
-	return r.messageBus.Request("router.greet", []byte{}, r.handleGreeting)
+	uuid, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+
+	replyTo := uuid.String()
+
+	r.messageBus.Subscribe(replyTo, r.handleGreeting)
+
+	return r.messageBus.PublishWithReplyTo("router.greet", replyTo, []byte{})
 }
 
 func (r *CFRouterClient) Register(port int, uri string) error {
@@ -64,8 +75,8 @@ func (r *CFRouterClient) Unregister(port int, uri string) error {
 	return r.sendRegistryMessage("router.unregister", port, []string{uri})
 }
 
-func (r *CFRouterClient) handleGreeting(greeting []byte) {
-	interval, err := r.intervalFrom(greeting)
+func (r *CFRouterClient) handleGreeting(greeting *yagnats.Message) {
+	interval, err := r.intervalFrom(greeting.Payload)
 	if err != nil {
 		log.Printf("failed to parse router.start: %s\n", err)
 		return

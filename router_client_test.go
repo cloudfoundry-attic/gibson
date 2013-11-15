@@ -1,9 +1,11 @@
 package gibson
 
 import (
-	"github.com/cloudfoundry/go_cfmessagebus/mock_cfmessagebus"
-	. "launchpad.net/gocheck"
 	"time"
+
+	"github.com/cloudfoundry/yagnats"
+	"github.com/cloudfoundry/yagnats/fakeyagnats"
+	. "launchpad.net/gocheck"
 )
 
 type RCSuite struct{}
@@ -13,114 +15,97 @@ func init() {
 }
 
 func (s *RCSuite) TestRouterClientRegistering(c *C) {
-	mbus := mock_cfmessagebus.NewMockMessageBus()
+	mbus := fakeyagnats.New()
 
 	routerClient := NewCFRouterClient("1.2.3.4", mbus)
 
-	registered := make(chan []byte)
-
-	mbus.Subscribe("router.register", func(msg []byte) {
-		registered <- msg
-	})
-
 	routerClient.Register(123, "abc")
 
-	select {
-	case msg := <-registered:
-		c.Assert(string(msg), Equals, `{"uris":["abc"],"host":"1.2.3.4","port":123}`)
-	case <-time.After(500 * time.Millisecond):
-		c.Error("did not receive a router.register!")
-	}
+	registrations := mbus.PublishedMessages["router.register"]
+
+	c.Assert(len(registrations), Not(Equals), 0)
+	c.Assert(string(registrations[0].Payload), Equals, `{"uris":["abc"],"host":"1.2.3.4","port":123}`)
 }
 
 func (s *RCSuite) TestRouterClientUnregistering(c *C) {
-	mbus := mock_cfmessagebus.NewMockMessageBus()
+	mbus := fakeyagnats.New()
 
 	routerClient := NewCFRouterClient("1.2.3.4", mbus)
-
-	registered := make(chan []byte)
-
-	mbus.Subscribe("router.unregister", func(msg []byte) {
-		registered <- msg
-	})
 
 	routerClient.Unregister(123, "abc")
 
-	select {
-	case msg := <-registered:
-		c.Assert(string(msg), Equals, `{"uris":["abc"],"host":"1.2.3.4","port":123}`)
-	case <-time.After(500 * time.Millisecond):
-		c.Error("did not receive a router.unregister!")
-	}
+	unregistrations := mbus.PublishedMessages["router.unregister"]
+
+	c.Assert(len(unregistrations), Not(Equals), 0)
+	c.Assert(string(unregistrations[0].Payload), Equals, `{"uris":["abc"],"host":"1.2.3.4","port":123}`)
 }
 
 func (s *RCSuite) TestRouterClientRouterStartHandling(c *C) {
-	mbus := mock_cfmessagebus.NewMockMessageBus()
+	mbus := fakeyagnats.New()
 
 	routerClient := NewCFRouterClient("1.2.3.4", mbus)
-
-	times := make(chan time.Time)
-
-	mbus.Subscribe("router.register", func(msg []byte) {
-		times <- time.Now()
-	})
 
 	err := routerClient.Greet()
 	c.Assert(err, IsNil)
 
-	mbus.Publish("router.start", []byte(`{"minimumRegisterIntervalInSeconds":1}`))
+	startCallback := mbus.Subscriptions["router.start"][0]
+	startCallback.Callback(&yagnats.Message{
+		Payload: []byte(`{"minimumRegisterIntervalInSeconds":1}`),
+	})
 
 	routerClient.Register(123, "abc")
 
-	initialRegister := timedReceive(times, 1*time.Second)
-	c.Assert(initialRegister, NotNil)
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 1)
 
-	time1 := timedReceive(times, 2*time.Second)
-	c.Assert(time1, NotNil)
+	time.Sleep(600 * time.Millisecond)
 
-	time2 := timedReceive(times, 2*time.Second)
-	c.Assert(time2, NotNil)
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 1)
 
-	c.Assert((*time2).Sub(*time1) >= 1*time.Second, Equals, true)
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 2)
+
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 2)
+
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 3)
 }
 
 func (s *RCSuite) TestRouterClientGreeting(c *C) {
-	mbus := mock_cfmessagebus.NewMockMessageBus()
+	mbus := fakeyagnats.New()
 
 	routerClient := NewCFRouterClient("1.2.3.4", mbus)
 
-	times := make(chan time.Time)
-
-	mbus.Subscribe("router.register", func(msg []byte) {
-		times <- time.Now()
-	})
-
 	routerClient.Register(123, "abc")
-
-	initialRegister := timedReceive(times, 1*time.Second)
-	c.Assert(initialRegister, NotNil)
-
-	mbus.RespondToChannel("router.greet", func([]byte) []byte {
-		return []byte(`{"minimumRegisterIntervalInSeconds":1}`)
-	})
 
 	err := routerClient.Greet()
 	c.Assert(err, IsNil)
 
-	time1 := timedReceive(times, 2*time.Second)
-	c.Assert(time1, NotNil)
+	greetMsg := mbus.PublishedMessages["router.greet"][0]
 
-	time2 := timedReceive(times, 2*time.Second)
-	c.Assert(time2, NotNil)
+	greetCallback := mbus.Subscriptions[greetMsg.ReplyTo][0]
+	greetCallback.Callback(&yagnats.Message{
+		Payload: []byte(`{"minimumRegisterIntervalInSeconds":1}`),
+	})
 
-	c.Assert((*time2).Sub(*time1) >= 1*time.Second, Equals, true)
-}
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 1)
 
-func timedReceive(from chan time.Time, giveup time.Duration) *time.Time {
-	select {
-	case val := <-from:
-		return &val
-	case <-time.After(giveup):
-		return nil
-	}
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 1)
+
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 2)
+
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 2)
+
+	time.Sleep(600 * time.Millisecond)
+
+	c.Assert(len(mbus.PublishedMessages["router.register"]), Equals, 3)
 }
