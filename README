@@ -21,7 +21,6 @@ Client library for interacting with Cloud Foundry's Router.
 
 See https://github.com/cloudfoundry/gorouter
 
-
 = Usage
 
     client := gibson.NewCFRouterClient("10.10.16.13", messageBus)
