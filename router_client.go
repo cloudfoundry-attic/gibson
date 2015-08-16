@@ -18,6 +18,7 @@ type RouterClient interface {
 
 type CFRouterClient struct {
 	Host       string
+	PrivateInstanceId string
 	messageBus yagnats.NATSClient
 
 	registry *Registry
@@ -28,9 +29,10 @@ type CFRouterClient struct {
 }
 
 type RegistryMessage struct {
-	URIs []string `json:"uris"`
-	Host string   `json:"host"`
-	Port int      `json:"port"`
+	URIs []string             `json:"uris"`
+	Host string               `json:"host"`
+	Port int                  `json:"port"`
+	PrivateInstanceId string  `json:"private_instance_id"`
 }
 
 type RouterGreetingMessage struct {
@@ -38,8 +40,13 @@ type RouterGreetingMessage struct {
 }
 
 func NewCFRouterClient(host string, messageBus yagnats.NATSClient) *CFRouterClient {
+	u4, err := uuid.NewV4()
+	if err != nil {
+		log.Printf("failed to create UUID as private instance id: %s\n", err)
+	}
 	return &CFRouterClient{
 		Host: host,
+		PrivateInstanceId: u4.String(),
 
 		registry: NewRegistry(),
 
@@ -108,6 +115,7 @@ func (r *CFRouterClient) sendRegistryMessage(subject string, port int, uris []st
 		URIs: uris,
 		Host: r.Host,
 		Port: port,
+		PrivateInstanceId: r.PrivateInstanceId,
 	}
 
 	json, err := json.Marshal(msg)

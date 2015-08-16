@@ -24,7 +24,8 @@ func (s *RCSuite) TestRouterClientRegistering(c *C) {
 	registrations := mbus.PublishedMessages("router.register")
 
 	c.Assert(len(registrations), Not(Equals), 0)
-	c.Assert(string(registrations[0].Payload), Equals, `{"uris":["abc"],"host":"1.2.3.4","port":123}`)
+	c.Assert(string(registrations[0].Payload), Equals,
+		`{"uris":["abc"],"host":"1.2.3.4","port":123,"private_instance_id":"` + routerClient.PrivateInstanceId + `"}`)
 }
 
 func (s *RCSuite) TestRouterClientUnregistering(c *C) {
@@ -37,7 +38,8 @@ func (s *RCSuite) TestRouterClientUnregistering(c *C) {
 	unregistrations := mbus.PublishedMessages("router.unregister")
 
 	c.Assert(len(unregistrations), Not(Equals), 0)
-	c.Assert(string(unregistrations[0].Payload), Equals, `{"uris":["abc"],"host":"1.2.3.4","port":123}`)
+	c.Assert(string(unregistrations[0].Payload), Equals,
+		`{"uris":["abc"],"host":"1.2.3.4","port":123,"private_instance_id":"` + routerClient.PrivateInstanceId + `"}`)
 }
 
 func (s *RCSuite) TestRouterClientRouterStartHandling(c *C) {
