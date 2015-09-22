@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apcera/nats"
 	"github.com/cloudfoundry/yagnats"
 	"github.com/nu7hatch/gouuid"
 )
@@ -18,7 +19,7 @@ type RouterClient interface {
 
 type CFRouterClient struct {
 	Host       string
-	messageBus yagnats.NATSClient
+	messageBus yagnats.NATSConn
 
 	registry *Registry
 
@@ -37,7 +38,7 @@ type RouterGreetingMessage struct {
 	MinimumRegisterInterval int `json:"minimumRegisterIntervalInSeconds"`
 }
 
-func NewCFRouterClient(host string, messageBus yagnats.NATSClient) *CFRouterClient {
+func NewCFRouterClient(host string, messageBus yagnats.NATSConn) *CFRouterClient {
 	return &CFRouterClient{
 		Host: host,
 
@@ -62,7 +63,7 @@ func (r *CFRouterClient) Greet() error {
 
 	r.messageBus.Subscribe(replyTo, r.handleGreeting)
 
-	return r.messageBus.PublishWithReplyTo("router.greet", replyTo, []byte{})
+	return r.messageBus.PublishRequest("router.greet", replyTo, []byte{})
 }
 
 func (r *CFRouterClient) Register(port int, uri string) error {
@@ -75,8 +76,8 @@ func (r *CFRouterClient) Unregister(port int, uri string) error {
 	return r.sendRegistryMessage("router.unregister", port, []string{uri})
 }
 
-func (r *CFRouterClient) handleGreeting(greeting *yagnats.Message) {
-	interval, err := r.intervalFrom(greeting.Payload)
+func (r *CFRouterClient) handleGreeting(greeting *nats.Msg) {
+	interval, err := r.intervalFrom(greeting.Data)
 	if err != nil {
 		log.Printf("failed to parse router.start: %s\n", err)
 		return
