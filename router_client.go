@@ -2,10 +2,12 @@ package gibson
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
+	"github.com/apcera/nats"
 	"github.com/cloudfoundry/yagnats"
 	"github.com/nu7hatch/gouuid"
 )
@@ -17,9 +19,9 @@ type RouterClient interface {
 }
 
 type CFRouterClient struct {
-	Host       string
+	Host              string
 	PrivateInstanceId string
-	messageBus yagnats.NATSClient
+	messageBus        yagnats.NATSConn
 
 	registry *Registry
 
@@ -29,23 +31,25 @@ type CFRouterClient struct {
 }
 
 type RegistryMessage struct {
-	URIs []string             `json:"uris"`
-	Host string               `json:"host"`
-	Port int                  `json:"port"`
-	PrivateInstanceId string  `json:"private_instance_id"`
+	URIs              []string `json:"uris"`
+	Host              string   `json:"host"`
+	Port              int      `json:"port"`
+	PrivateInstanceId string   `json:"private_instance_id"`
 }
 
 type RouterGreetingMessage struct {
 	MinimumRegisterInterval int `json:"minimumRegisterIntervalInSeconds"`
 }
 
-func NewCFRouterClient(host string, messageBus yagnats.NATSClient) *CFRouterClient {
+func NewCFRouterClient(host string, messageBus yagnats.NATSConn) *CFRouterClient {
 	u4, err := uuid.NewV4()
 	if err != nil {
 		log.Printf("failed to create UUID as private instance id: %s\n", err)
+		fmt.Println("NewCFRouterClient: err happen: %#v", err)
 	}
+
 	return &CFRouterClient{
-		Host: host,
+		Host:              host,
 		PrivateInstanceId: u4.String(),
 
 		registry: NewRegistry(),
@@ -56,6 +60,7 @@ func NewCFRouterClient(host string, messageBus yagnats.NATSClient) *CFRouterClie
 
 func (r *CFRouterClient) Greet() error {
 	_, err := r.messageBus.Subscribe("router.start", r.handleGreeting)
+	fmt.Printf("the err of greet: %#v, the subscribe func: %#v", err, r.messageBus.Subscribe)
 	if err != nil {
 		return err
 	}
@@ -67,12 +72,14 @@ func (r *CFRouterClient) Greet() error {
 
 	replyTo := uuid.String()
 
-	r.messageBus.Subscribe(replyTo, r.handleGreeting)
+	subscribe, err := r.messageBus.Subscribe(replyTo, r.handleGreeting)
+	fmt.Printf("\nThe Subscribe is: %#v, the err: %#v\n", subscribe, err)
 
-	return r.messageBus.PublishWithReplyTo("router.greet", replyTo, []byte{})
+	return r.messageBus.PublishRequest("router.greet", replyTo, []byte{})
 }
 
 func (r *CFRouterClient) Register(port int, uri string) error {
+	fmt.Println("Enter register\n")
 	r.registry.Register(port, uri)
 	return r.sendRegistryMessage("router.register", port, []string{uri})
 }
@@ -82,8 +89,10 @@ func (r *CFRouterClient) Unregister(port int, uri string) error {
 	return r.sendRegistryMessage("router.unregister", port, []string{uri})
 }
 
-func (r *CFRouterClient) handleGreeting(greeting *yagnats.Message) {
-	interval, err := r.intervalFrom(greeting.Payload)
+func (r *CFRouterClient) handleGreeting(greeting *nats.Msg) {
+	fmt.Println("Enter the handleGreeting")
+
+	interval, err := r.intervalFrom(greeting.Data)
 	if err != nil {
 		log.Printf("failed to parse router.start: %s\n", err)
 		return
@@ -112,9 +121,9 @@ func (r *CFRouterClient) callbackPeriodically(interval time.Duration) {
 
 func (r *CFRouterClient) sendRegistryMessage(subject string, port int, uris []string) error {
 	msg := &RegistryMessage{
-		URIs: uris,
-		Host: r.Host,
-		Port: port,
+		URIs:              uris,
+		Host:              r.Host,
+		Port:              port,
 		PrivateInstanceId: r.PrivateInstanceId,
 	}
 
