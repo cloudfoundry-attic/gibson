@@ -16,7 +16,6 @@ type RouterClient interface {
 	Register(port int, uri string) error
 	RegisterAll(port int, uris []string) error
 	Unregister(port int, uri string) error
-	UnregisterAll(port int, uris []string) error
 }
 
 type CFRouterClient struct {
@@ -88,11 +87,6 @@ func (r *CFRouterClient) Unregister(port int, uri string) error {
 func (r *CFRouterClient) RegisterAll(port int, uris []string) error {
 	r.registry.RegisterAll(port, uris)
 	return r.sendRegistryMessage("router.register", port, uris)
-}
-
-func (r *CFRouterClient) UnregisterAll(port int, uris []string) error {
-	r.registry.UnregisterAll(port, uris)
-	return r.sendRegistryMessage("router.unregister", port, uris)
 }
 
 func (r *CFRouterClient) handleGreeting(greeting *nats.Msg) {
