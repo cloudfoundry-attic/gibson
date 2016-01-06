@@ -36,6 +36,19 @@ func (r *Registry) Unregister(port int, uri string) {
 	}
 }
 
+func (r *Registry) RegisterAll(port int, uris []string) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if r.routes[port] == nil {
+		r.routes[port] = make(map[string]bool)
+	}
+
+	for _, uri := range uris {
+		r.routes[port][uri] = true
+	}
+}
+
 func (r *Registry) InParallel(callback func(int, []string)) (count int) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
