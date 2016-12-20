@@ -1,3 +1,5 @@
+ # This library is deprecated. The supported way to register routes is using [route-registrar](https://github.com/cloudfoundry-incubator/route-registrar)
+ 
                           ,dPYb,
                           IP'`Yb
                      gg   I8  8I
